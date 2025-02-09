@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screen Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #1a1a1a;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .container {
+            position: relative;
+            width: 95vw;
+            height: 95vh;
+            background-color: #000;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        #screenView {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            image-rendering: crisp-edges;
+        }
+
+        .status-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            font-family: monospace;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 1.5em;
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                width: 100vw;
+                height: 100vh;
+                border-radius: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="loading" id="loading"></div>
+    <img id="screenView" alt="Remote Screen">
+    <div class="status-bar">
+        <span id="timestamp">Connected: -</span>
+        <span id="resolution">Resolution: -</span>
+        <span id="fps">FPS: -</span>
+    </div>
+</div>
+
+<script>
+    const screenView = document.getElementById('screenView');
+    const loading = document.getElementById('loading');
+    const timestamp = document.getElementById('timestamp');
+    const resolution = document.getElementById('resolution');
+    const fps = document.getElementById('fps');
+
+    let frameCount = 0;
+    let lastUpdate = Date.now();
+    let isFetching = false;
+
+    // 动态更新统计信息
+    function updateStats() {
+        const now = Date.now();
+        const elapsed = (now - lastUpdate) / 1000;
+        const currentFPS = Math.round(frameCount / elapsed);
+
+        fps.textContent = `FPS: ${currentFPS}`;
+        frameCount = 0;
+        lastUpdate = now;
+    }
+
+    // 获取屏幕截图
+    async function fetchScreen() {
+        if (isFetching) return;
+
+        try {
+            isFetching = true;
+            loading.style.display = 'block';
+
+            const response = await fetch('http://192.168.0.209:8080/screenshot?' + Date.now());
+            if (!response.ok) throw new Error(response.statusText);
+
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+
+            screenView.onload = () => {
+                URL.revokeObjectURL(url);
+                loading.style.display = 'none';
+                frameCount++;
+                resolution.textContent = `Resolution: ${screenView.naturalWidth}x${screenView.naturalHeight}`;
+                timestamp.textContent = `Connected: ${new Date().toLocaleTimeString()}`;
+            };
+
+            screenView.src = url;
+        } catch (error) {
+            console.error('Fetch error:', error);
+            loading.textContent = 'Connection Error';
+        } finally {
+            isFetching = false;
+        }
+    }
+
+    // 自动调整请求频率
+    let interval = 50;
+    function adjustInterval() {
+        const now = Date.now();
+        const actualInterval = now - lastUpdate;
+        interval = Math.min(2000, Math.max(500, actualInterval * 0.8));
+    }
+
+    // 修改请求函数，移除请求间隔调整
+    function startMonitoring() {
+        // 设置请求间隔为 50 毫秒（每秒 20 次请求）
+        const requestInterval = 50;
+        // 启动定时器，每秒请求 20 次
+        setInterval(fetchScreen, requestInterval);
+        // 使用 requestAnimationFrame 连续请求
+        // function fetchLoop() {
+        //     fetchScreen();
+        //     requestAnimationFrame(fetchLoop);
+        // }
+        // fetchLoop();
+
+        // 统计信息更新保持不变
+        setInterval(updateStats, 1000);
+    }
+
+    // 页面加载完成后启动
+    window.addEventListener('load', startMonitoring);
+</script>
+</body>
+</html>
